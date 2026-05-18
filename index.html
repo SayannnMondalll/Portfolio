@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My 3D Portfolio Room</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #111;
+            color: #fff;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: block;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            letter-spacing: 2px;
+        }
+
+        p.instructions {
+            margin-top: 5px;
+            font-size: 1rem;
+            color: #ccc;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+        }
+
+        #info-panel {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.75);
+            padding: 20px 30px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(5px);
+            text-align: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            max-width: 400px;
+        }
+
+        #info-panel.visible {
+            opacity: 1;
+        }
+        
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 24px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+            text-shadow: 0 0 5px #000;
+        }
+
+        #item-modal {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(15, 15, 15, 0.95);
+            padding: 40px;
+            border-radius: 12px;
+            border: 1px solid #ff4757;
+            color: white;
+            z-index: 30;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(255, 71, 87, 0.4);
+            max-width: 500px;
+            pointer-events: auto;
+            backdrop-filter: blur(10px);
+        }
+
+        #item-modal.active {
+            display: block;
+        }
+
+        #item-modal h2 {
+            margin-top: 0;
+            color: #ff4757;
+            font-size: 2rem;
+        }
+
+        #item-modal p {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        #modal-close {
+            padding: 10px 25px;
+            background: #ff4757;
+            border: none;
+            color: #111;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.2s;
+        }
+
+        #modal-close:hover {
+            background: #ff6b81;
+        }
+
+        #modal-link {
+            padding: 10px 25px;
+            background: #1e90ff;
+            border: none;
+            color: #111;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.2s;
+            text-decoration: none;
+            display: none; /* Hidden by default */
+        }
+
+        #modal-link:hover {
+            background: #70a1ff;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            z-index: 20;
+            transition: opacity 0.5s ease;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+</head>
+<body>
+
+    <div id="loading">Loading Portfolio Room...</div>
+    <div id="crosshair">+</div>
+
+    <div id="item-modal">
+        <h2 id="modal-title">Title</h2>
+        <!-- Image tag added here for certificates -->
+        <img id="modal-img" src="" alt="Certificate" style="display: none; max-width: 100%; max-height: 300px; margin: 0 auto 20px auto; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);">
+        <p id="modal-desc">Description goes here.</p>
+        <div style="display: flex; justify-content: center; gap: 15px;">
+            <a id="modal-link" href="#" target="_blank">View Prototype</a>
+            <button id="modal-close">Close</button>
+        </div>
+    </div>
+
+    <div id="ui-container">
+        <h1>PORTFOLIO ROOM</h1>
+        <p class="instructions">Click anywhere to start.<br>W, A, S, D to move. SHIFT to sprint. SPACE to jump.<br>Click on items to view details.</p>
+    </div>
+
+    <div id="info-panel">
+        <h2 id="info-title">Project Title</h2>
+        <p id="info-desc">Description of the project goes here.</p>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x0a0a0a);
+        scene.fog = new THREE.Fog(0x0a0a0a, 10, 50);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(14, 3.5, -16); // Increased height from 2.5 to 3.5
+        camera.lookAt(0, 3.5, 0); // Face towards the center of the room at the new height
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        let controls;
+        const initControls = () => {
+            controls = new THREE.PointerLockControls(camera, document.body);
+
+            const instructions = document.querySelector('.instructions');
+            
+            document.body.addEventListener('click', function () {
+                if (!document.getElementById('item-modal').classList.contains('active')) {
+                    controls.lock();
+                }
+            });
+
+            controls.addEventListener('lock', function () {
+                instructions.innerHTML = "W, A, S, D to move. SHIFT to sprint. SPACE to jump.<br>Click on items for details.<br>Press ESC to unlock.";
+                document.getElementById('crosshair').style.display = 'block';
+            });
+
+            controls.addEventListener('unlock', function () {
+                instructions.innerHTML = "Click anywhere to resume.<br>W, A, S, D to move. SPACE to jump.<br>Click on items for details.";
+                hideInfo();
+                document.getElementById('crosshair').style.display = 'none';
+            });
+
+            scene.add(controls.getObject());
+        };
+
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        let isRunning = false;
+        let canJump = false;
+
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const speed = 40.0;
+        const jumpVelocity = 8.0;
+        const gravity = 30.0;
+        let prevTime = performance.now();
+
+        const onKeyDown = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = true; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = true; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = true; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = true; break;
+                case 'ShiftLeft':
+                case 'ShiftRight': isRunning = true; break;
+                case 'Space':
+                    if (canJump === true) {
+                        velocity.y = jumpVelocity;
+                        canJump = false;
+                    }
+                    break;
+            }
+        };
+
+        const onKeyUp = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = false; break;
+                case 'ShiftLeft':
+                case 'ShiftRight': isRunning = false; break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // Premium Hemisphere Light for rich ambient blending (cool ceiling, dark warm floor)
+        const hemiLight = new THREE.HemisphereLight(0x445577, 0x111122, 0.8);
+        scene.add(hemiLight);
+
+        // Main Point Light - softer, slightly warm for a premium gallery feel
+        const mainLight = new THREE.PointLight(0xfff4e6, 1.2, 150);
+        mainLight.position.set(0, 7.5, 0); // Pushed up near the ceiling
+        mainLight.castShadow = true;
+        mainLight.shadow.mapSize.width = 2048;
+        mainLight.shadow.mapSize.height = 2048;
+        mainLight.shadow.bias = -0.0005; // Smooth out shadow acne for a cleaner look
+        scene.add(mainLight);
+
+        // Premium overhead architectural light fixture (Sleek Halo Chandelier)
+        const fixtureGroup = new THREE.Group();
+        fixtureGroup.position.set(0, 7.5, 0);
+
+        // Inner glowing ring
+        const haloGeom = new THREE.TorusGeometry(3.5, 0.05, 16, 128);
+        const haloMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const halo = new THREE.Mesh(haloGeom, haloMat);
+        halo.rotation.x = Math.PI / 2;
+        fixtureGroup.add(halo);
+
+        // Outer dark brushed metal housing
+        const housingGeom = new THREE.TorusGeometry(3.6, 0.1, 16, 128);
+        const housingMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.2 });
+        const housing = new THREE.Mesh(housingGeom, housingMat);
+        housing.rotation.x = Math.PI / 2;
+        housing.position.y = 0.05;
+        fixtureGroup.add(housing);
+        
+        // Connecting rods to the ceiling
+        const rodGeom = new THREE.CylinderGeometry(0.03, 0.03, 0.5);
+        const rodMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.9, roughness: 0.2 });
+        for(let i = 0; i < 4; i++) {
+            const rod = new THREE.Mesh(rodGeom, rodMat);
+            const angle = (i / 4) * Math.PI * 2 + (Math.PI/4); // offset by 45 degrees
+            rod.position.set(Math.cos(angle) * 3.6, 0.25, Math.sin(angle) * 3.6);
+            fixtureGroup.add(rod);
+        }
+
+        scene.add(fixtureGroup);
+
+        const roomWidth = 40;
+        const roomDepth = 40;
+        const wallHeight = 8;
+        const halfWidth = roomWidth / 2;
+        const halfDepth = roomDepth / 2;
+
+        const interactables = [];
+        const dynamicObjects = [];
+        const floatingDisplays = [];
+        const raycaster = new THREE.Raycaster();
+        const centerScreen = new THREE.Vector2(0, 0);
+
+        const floorMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x3742fa,
+            roughness: 0.2,
+            metalness: 0.5
+        });
+
+        const ceilingMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff,
+            roughness: 0.8,
+            metalness: 0.1
+        });
+
+        const floorGeometry = new THREE.PlaneGeometry(roomWidth, roomDepth);
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const ceilingGeometry = new THREE.PlaneGeometry(roomWidth, roomDepth);
+        const ceiling = new THREE.Mesh(ceilingGeometry, ceilingMaterial);
+        ceiling.rotation.x = Math.PI / 2;
+        ceiling.position.y = wallHeight;
+        scene.add(ceiling);
+
+        const walls = new THREE.Group();
+        scene.add(walls);
+
+        const cyberMuralSvg1 = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" fill="none">
+            <path d="M100 256 L300 150 L500 350 L700 150 L900 256" stroke="white" stroke-width="3" stroke-dasharray="10,10"/>
+            <circle cx="100" cy="256" r="18" fill="#111" stroke="#ff4757" stroke-width="6"/>
+            <circle cx="300" cy="150" r="24" fill="#111" stroke="#1e90ff" stroke-width="8"/>
+            <circle cx="500" cy="350" r="30" fill="#111" stroke="#2ed573" stroke-width="10"/>
+            <circle cx="700" cy="150" r="24" fill="#111" stroke="#ffa502" stroke-width="8"/>
+            <circle cx="900" cy="256" r="18" fill="#111" stroke="#ff4757" stroke-width="6"/>
+            <path d="M300 150 L300 280 M500 350 L500 150 M700 150 L700 300" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+            <rect x="260" y="280" width="80" height="30" rx="8" fill="rgba(30,144,255,0.2)" stroke="#1e90ff" stroke-width="2"/>
+            <rect x="660" y="300" width="80" height="30" rx="8" fill="rgba(255,165,2,0.2)" stroke="#ffa502" stroke-width="2"/>
+            <path d="M50 50 L150 50 M50 50 L50 150" stroke="white" stroke-width="3"/>
+            <path d="M974 50 L874 50 M974 50 L974 150" stroke="white" stroke-width="3"/>
+        </svg>
+        `;
+
+        const cyberMuralSvg2 = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" fill="none">
+            <g transform="translate(100, 50)">
+                <circle cx="200" cy="200" r="150" stroke="white" stroke-width="2" stroke-dasharray="5,15"/>
+                <circle cx="200" cy="200" r="100" stroke="white" stroke-width="4"/>
+                <circle cx="200" cy="200" r="50" stroke="white" stroke-width="1" stroke-dasharray="2,2"/>
+                <line x1="200" y1="20" x2="200" y2="380" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                <line x1="20" y1="200" x2="380" y2="200" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                <circle cx="200" cy="50" r="10" fill="#2ed573"/>
+                <circle cx="350" cy="200" r="10" fill="#1e90ff"/>
+                <circle cx="200" cy="350" r="10" fill="#ff4757"/>
+            </g>
+            <g transform="translate(600, 100)">
+                <rect x="0" y="0" width="250" height="150" rx="15" stroke="white" stroke-width="3" fill="rgba(255,255,255,0.05)"/>
+                <line x1="30" y1="50" x2="220" y2="50" stroke="white" stroke-width="2"/>
+                <line x1="30" y1="90" x2="180" y2="90" stroke="white" stroke-width="2"/>
+                <line x1="30" y1="110" x2="140" y2="110" stroke="white" stroke-width="2"/>
+            </g>
+        </svg>
+        `;
+
+        const cyberMuralSvg3 = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" fill="none">
+            <g opacity="0.6">
+                <circle cx="512" cy="256" r="180" stroke="currentColor" stroke-width="3" stroke-dasharray="10, 15"/>
+                <circle cx="512" cy="256" r="140" stroke="currentColor" stroke-width="1" opacity="0.5"/>
+                <circle cx="512" cy="256" r="100" stroke="currentColor" stroke-width="4" stroke-dasharray="40, 20"/>
+                <path d="M312 256 L100 256 M712 256 L924 256 M512 56 L512 100 M512 412 L512 456" stroke="currentColor" stroke-width="2"/>
+                <circle cx="512" cy="256" r="30" fill="currentColor" opacity="0.2"/>
+                <circle cx="512" cy="256" r="10" fill="currentColor"/>
+                <rect x="200" y="100" width="40" height="40" rx="5" stroke="currentColor" stroke-width="2"/>
+                <rect x="784" y="372" width="40" height="40" rx="5" stroke="currentColor" stroke-width="2"/>
+                <path d="M 220 140 L 220 256" stroke="currentColor" stroke-width="1" stroke-dasharray="5,5"/>
+                <path d="M 804 256 L 804 372" stroke="currentColor" stroke-width="1" stroke-dasharray="5,5"/>
+            </g>
+        </svg>
+        `;
+
+        const cyberMuralSvg4 = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" fill="none">
+            <g opacity="0.5">
+                <path d="M -100 256 C 200 56, 400 456, 1124 256" stroke="currentColor" stroke-width="4" fill="none"/>
+                <path d="M -100 256 C 300 156, 500 356, 1124 256" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="10, 10"/>
+                <path d="M -100 256 C 400 256, 600 256, 1124 256" stroke="currentColor" stroke-width="1" fill="none" opacity="0.5"/>
+                <circle cx="218" cy="214" r="8" fill="currentColor"/>
+                <circle cx="512" cy="256" r="12" fill="none" stroke="currentColor" stroke-width="3"/>
+                <circle cx="512" cy="256" r="4" fill="currentColor"/>
+                <circle cx="806" cy="298" r="8" fill="currentColor"/>
+                <circle cx="218" cy="214" r="25" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3,3"/>
+                <circle cx="806" cy="298" r="25" fill="none" stroke="currentColor" stroke-width="1" stroke-dasharray="3,3"/>
+                <path d="M 218 214 L 218 100 L 300 100" stroke="currentColor" stroke-width="2" fill="none"/>
+                <path d="M 806 298 L 806 412 L 724 412" stroke="currentColor" stroke-width="2" fill="none"/>
+                <rect x="300" y="85" width="80" height="30" rx="4" stroke="currentColor" stroke-width="2"/>
+                <rect x="644" y="397" width="80" height="30" rx="4" stroke="currentColor" stroke-width="2"/>
+            </g>
+        </svg>
+        `;
+
+        const cyberMuralSvg5 = `
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512" fill="none">
+            <g opacity="0.4">
+                <polygon points="50,256 100,100 300,100 350,256 300,412 100,412" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="20,10"/>
+                <polygon points="674,256 724,100 924,100 974,256 924,412 724,412" stroke="currentColor" stroke-width="3" fill="none" stroke-dasharray="20,10"/>
+                <line x1="350" y1="256" x2="674" y2="256" stroke="currentColor" stroke-width="2" stroke-dasharray="5,5"/>
+                <circle cx="200" cy="256" r="50" stroke="currentColor" stroke-width="2"/>
+                <circle cx="824" cy="256" r="50" stroke="currentColor" stroke-width="2"/>
+                <circle cx="200" cy="256" r="20" fill="currentColor"/>
+                <circle cx="824" cy="256" r="20" fill="currentColor"/>
+            </g>
+        </svg>
+        `;
+
+        function createWallDecal(svgString, color, position, rotation, width, height) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            const img = new Image();
+            const coloredSvg = svgString.replace(/white/g, '#ffffff').replace(/currentColor/g, color);
+            const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(coloredSvg);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            img.onload = () => {
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 30;
+                ctx.drawImage(img, 0, 0, 1024, 512);
+                texture.needsUpdate = true;
+            };
+            img.src = svgUrl;
+
+            const geom = new THREE.PlaneGeometry(width, height);
+            const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(position);
+            mesh.rotation.copy(rotation);
+            scene.add(mesh);
+        }
+
+        // Add digital blueprints between framed items
+        createWallDecal(cyberMuralSvg1, "#1e90ff", new THREE.Vector3(halfWidth - 0.08, 3.5, -12), new THREE.Euler(0, -Math.PI/2, 0), 8, 4);
+        createWallDecal(cyberMuralSvg2, "#2ed573", new THREE.Vector3(halfWidth - 0.08, 3.5, 12), new THREE.Euler(0, -Math.PI/2, 0), 8, 4);
+        createWallDecal(cyberMuralSvg1, "#ff4757", new THREE.Vector3(-halfWidth + 0.08, 3.5, -12), new THREE.Euler(0, Math.PI/2, 0), 8, 4);
+        createWallDecal(cyberMuralSvg2, "#ffa502", new THREE.Vector3(-halfWidth + 0.08, 3.5, 12), new THREE.Euler(0, Math.PI/2, 0), 8, 4);
+
+        // --- NEW MASSIVE GLOWING BACKGROUND DECALS ---
+        // North Wall Backdrop (Projects - Data Waves)
+        createWallDecal(cyberMuralSvg4, "#00cec9", new THREE.Vector3(-4, 3.5, -halfDepth + 0.02), new THREE.Euler(0, 0, 0), 32, 16);
+        // South Wall Backdrop (Skills - Tech Rings)
+        createWallDecal(cyberMuralSvg3, "#fdcb6e", new THREE.Vector3(0, 3.5, halfDepth - 0.02), new THREE.Euler(0, Math.PI, 0), 32, 16);
+        // East Wall Backdrop (Certificates - Cyber Hexagons)
+        createWallDecal(cyberMuralSvg5, "#1e90ff", new THREE.Vector3(halfWidth - 0.02, 3.5, 0), new THREE.Euler(0, -Math.PI/2, 0), 32, 16);
+        // West Wall Backdrop (Hackathons - Data Waves)
+        createWallDecal(cyberMuralSvg4, "#e84393", new THREE.Vector3(-halfWidth + 0.02, 3.5, 0), new THREE.Euler(0, Math.PI/2, 0), 32, 16);
+
+        function createWall(width, height, position, rotation, colorHex) {
+            const mat = new THREE.MeshStandardMaterial({
+                color: colorHex,
+                roughness: 0.7,
+                metalness: 0.1
+            });
+            const geom = new THREE.PlaneGeometry(width, height);
+            const wall = new THREE.Mesh(geom, mat);
+            wall.position.copy(position);
+            wall.rotation.copy(rotation);
+            wall.receiveShadow = true;
+            walls.add(wall);
+            return wall;
+        }
+
+        createWall(roomWidth, wallHeight, new THREE.Vector3(0, wallHeight/2, -halfDepth), new THREE.Euler(0, 0, 0), 0xff4757);
+        createWall(roomWidth, wallHeight, new THREE.Vector3(0, wallHeight/2, halfDepth), new THREE.Euler(0, Math.PI, 0), 0x1e90ff);
+        createWall(roomDepth, wallHeight, new THREE.Vector3(halfWidth, wallHeight/2, 0), new THREE.Euler(0, -Math.PI/2, 0), 0x2ed573);
+        createWall(roomDepth, wallHeight, new THREE.Vector3(-halfWidth, wallHeight/2, 0), new THREE.Euler(0, Math.PI/2, 0), 0xffa502);
+
+        const rugGeom = new THREE.PlaneGeometry(12, 12);
+        const rugMat = new THREE.MeshStandardMaterial({ color: 0xeccc68, roughness: 1.0 });
+        const rug = new THREE.Mesh(rugGeom, rugMat);
+        rug.rotation.x = -Math.PI / 2;
+        rug.position.y = 0.01;
+        rug.receiveShadow = true;
+        scene.add(rug);
+
+        const floorGridGroup = new THREE.Group();
+        const gridColor = 0x3742fa;
+        const gridLineMat = new THREE.LineBasicMaterial({ color: gridColor, transparent: true, opacity: 0.5 });
+        
+        for (let i = -16; i <= 16; i += 4) {
+            const pointsH = [new THREE.Vector3(-18, 0.02, i), new THREE.Vector3(18, 0.02, i)];
+            const geomH = new THREE.BufferGeometry().setFromPoints(pointsH);
+            const lineH = new THREE.Line(geomH, gridLineMat);
+            floorGridGroup.add(lineH);
+
+            const pointsV = [new THREE.Vector3(i, 0.02, -18), new THREE.Vector3(i, 0.02, 18)];
+            const geomV = new THREE.BufferGeometry().setFromPoints(pointsV);
+            const lineV = new THREE.Line(geomV, gridLineMat);
+            floorGridGroup.add(lineV);
+        }
+        scene.add(floorGridGroup);
+
+        const particleCount = 200;
+        const particlesGeom = new THREE.BufferGeometry();
+        const positions = new Float32Array(particleCount * 3);
+        for(let i = 0; i < particleCount * 3; i += 3) {
+            positions[i] = (Math.random() - 0.5) * 38; 
+            positions[i+1] = Math.random() * wallHeight; 
+            positions[i+2] = (Math.random() - 0.5) * 38; 
+        }
+        particlesGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        
+        const pCanvas = document.createElement('canvas');
+        pCanvas.width = 16;
+        pCanvas.height = 16;
+        const pCtx = pCanvas.getContext('2d');
+        const pGrad = pCtx.createRadialGradient(8, 8, 0, 8, 8, 8);
+        pGrad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+        pGrad.addColorStop(0.4, 'rgba(255, 255, 255, 0.5)');
+        pGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        pCtx.fillStyle = pGrad;
+        pCtx.fillRect(0, 0, 16, 16);
+        const pTex = new THREE.CanvasTexture(pCanvas);
+        
+        const particlesMat = new THREE.PointsMaterial({
+            size: 0.18,
+            map: pTex,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+        const particleSystem = new THREE.Points(particlesGeom, particlesMat);
+        scene.add(particleSystem);
+
+        const pillarGeom = new THREE.CylinderGeometry(0.6, 0.6, wallHeight, 32);
+        const pillarMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+        const pillarPositions = [ [-12, -12], [12, -12], [-12, 12], [12, 12] ];
+        pillarPositions.forEach(pos => {
+            const pillar = new THREE.Mesh(pillarGeom, pillarMat);
+            pillar.position.set(pos[0], wallHeight/2, pos[1]);
+            pillar.castShadow = true;
+            pillar.receiveShadow = true;
+            scene.add(pillar);
+        });
+
+        function createBench(x, z, rotY) {
+            const benchGroup = new THREE.Group();
+            
+            const seatGeom = new THREE.BoxGeometry(4, 0.2, 1.2);
+            const seatMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+            const seat = new THREE.Mesh(seatGeom, seatMat);
+            seat.position.y = 0.6;
+            seat.castShadow = true;
+            seat.receiveShadow = true;
+            benchGroup.add(seat);
+
+            const legGeom = new THREE.BoxGeometry(0.2, 0.5, 1);
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 });
+            const leg1 = new THREE.Mesh(legGeom, legMat);
+            leg1.position.set(-1.6, 0.25, 0);
+            leg1.castShadow = true;
+            benchGroup.add(leg1);
+            const leg2 = new THREE.Mesh(legGeom, legMat);
+            leg2.position.set(1.6, 0.25, 0);
+            leg2.castShadow = true;
+            benchGroup.add(leg2);
+
+            benchGroup.position.set(x, 0, z);
+            benchGroup.rotation.y = rotY;
+            scene.add(benchGroup);
+        }
+        createBench(0, -7, 0);
+        createBench(0, 7, 0);
+
+        function createWallSign(text, pos, rot) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, 512, 128);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, 256, 64);
+            const tex = new THREE.CanvasTexture(canvas);
+            const geom = new THREE.PlaneGeometry(12, 3);
+            const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true });
+            const mesh = new THREE.Mesh(geom, mat);
+            mesh.position.copy(pos);
+            mesh.rotation.copy(rot);
+            scene.add(mesh);
+        }
+
+        createWallSign("OTHER PROJECTS", new THREE.Vector3(0, 7, -halfDepth + 0.05), new THREE.Euler(0, 0, 0));
+        createWallSign("CERTIFICATES", new THREE.Vector3(halfWidth - 0.05, 7, 0), new THREE.Euler(0, -Math.PI/2, 0));
+        createWallSign("SKILLS", new THREE.Vector3(0, 7, halfDepth - 0.05), new THREE.Euler(0, Math.PI, 0));
+        createWallSign("HACKATHONS", new THREE.Vector3(-halfWidth + 0.05, 7, 0), new THREE.Euler(0, Math.PI/2, 0));
+
+        function createSpriteTexture(color, text) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 256; // Wider aspect ratio for text
+            const ctx = canvas.getContext('2d');
+
+            ctx.clearRect(0, 0, 512, 256);
+
+            ctx.font = 'bold 70px "Segoe UI", Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const lines = text.split('\n');
+            const lineHeight = 80;
+            const startY = 128 - ((lines.length - 1) * lineHeight) / 2;
+
+            lines.forEach((line, index) => {
+                // Heavy black outline for maximum readability against bright 3D lights
+                ctx.lineJoin = 'round';
+                ctx.lineWidth = 8;
+                ctx.strokeStyle = '#000000';
+                ctx.strokeText(line, 256, startY + (index * lineHeight));
+
+                // Bright white text with glowing shadow
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(line, 256, startY + (index * lineHeight));
+                ctx.shadowBlur = 0; // reset for next line
+            });
+
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.generateMipmaps = false; // Forces full resolution text at all distances!
+            tex.minFilter = THREE.LinearFilter; 
+            tex.magFilter = THREE.LinearFilter; 
+            return tex;
+        }
+
+        function createIconTexture(svgString, color) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            // Draw a glowing circle behind the icon
+            const gradient = ctx.createRadialGradient(256, 256, 0, 256, 256, 256);
+            gradient.addColorStop(0, color);
+            gradient.addColorStop(0.6, 'rgba(0,0,0,0)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 512, 512);
+
+            const img = new Image();
+            const coloredSvg = svgString.replace('fill="white"', `fill="#ffffff"`);
+            const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(coloredSvg);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            
+            img.onload = () => {
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 30;
+                // Draw SVG much larger: 384x384 inside 512x512
+                ctx.drawImage(img, 64, 64, 384, 384); 
+                texture.needsUpdate = true;
+            };
+            img.src = svgUrl;
+
+            return texture;
+        }
+
+        function addCenterDisplay(itemData, x) {
+            const displayGroup = new THREE.Group();
+            displayGroup.position.set(x, 3.5, 0);
+
+            // Sci-fi hexagonal base on the floor
+            const baseGeom = new THREE.CylinderGeometry(2, 2.5, 0.4, 6);
+            const baseMat = new THREE.MeshStandardMaterial({color: 0x111111, metalness: 0.9, roughness: 0.1});
+            const base = new THREE.Mesh(baseGeom, baseMat);
+            base.position.set(x, 0.2, 0);
+            scene.add(base);
+
+            // Glowing ring on the base
+            const glowRingGeom = new THREE.TorusGeometry(1.5, 0.05, 16, 6);
+            const glowRingMat = new THREE.MeshBasicMaterial({color: itemData.color});
+            const glowRing = new THREE.Mesh(glowRingGeom, glowRingMat);
+            glowRing.position.set(x, 0.45, 0);
+            glowRing.rotation.x = Math.PI / 2;
+            scene.add(glowRing);
+
+            const holoGroup = new THREE.Group();
+            displayGroup.add(holoGroup);
+
+            // Outer energy field (wireframe sphere)
+            const shieldGeom = new THREE.SphereGeometry(1.8, 16, 16);
+            const shieldMat = new THREE.MeshBasicMaterial({
+                color: itemData.color,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.2,
+                blending: THREE.AdditiveBlending
+            });
+            const shield = new THREE.Mesh(shieldGeom, shieldMat);
+            holoGroup.add(shield);
+
+            // Inner orbiting rings
+            const ringGeom = new THREE.TorusGeometry(1.2, 0.02, 16, 64);
+            const ringMat = new THREE.MeshBasicMaterial({ color: itemData.color, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending });
+            const ring1 = new THREE.Mesh(ringGeom, ringMat);
+            ring1.rotation.x = Math.PI / 2;
+            holoGroup.add(ring1);
+            
+            const ring2 = new THREE.Mesh(ringGeom, ringMat);
+            ring2.rotation.y = Math.PI / 2;
+            holoGroup.add(ring2);
+
+            // Central SVG Icon Sprite
+            const iconTexture = createIconTexture(itemData.svg, itemData.color);
+            const iconMat = new THREE.SpriteMaterial({ map: iconTexture, transparent: true, blending: THREE.AdditiveBlending });
+            const iconSprite = new THREE.Sprite(iconMat);
+            iconSprite.scale.set(3.5, 3.5, 1); // Increased base scale
+            holoGroup.add(iconSprite);
+
+            // 360-degree Text Sprite (Always faces the camera)
+            const spriteMap = createSpriteTexture(itemData.color, itemData.text);
+            // Removed AdditiveBlending so text doesn't wash out, added depthWrite false to prevent clipping
+            const spriteMat = new THREE.SpriteMaterial({ map: spriteMap, color: 0xffffff, transparent: true, depthWrite: false }); 
+            const sprite = new THREE.Sprite(spriteMat);
+            sprite.scale.set(6, 3, 1); // Adjusted for the 2:1 aspect ratio of the new canvas
+            sprite.position.y = 3.4; // Moved higher to clear the rings and shield
+            displayGroup.add(sprite);
+
+            // Invisible interaction cylinder covering the entire hologram
+            const hitGeom = new THREE.CylinderGeometry(2, 2, 6, 16);
+            const hitMat = new THREE.MeshBasicMaterial({visible: false});
+            const interactionCylinder = new THREE.Mesh(hitGeom, hitMat);
+            interactionCylinder.position.y = 1;
+            interactionCylinder.userData = { 
+                title: itemData.title, 
+                description: itemData.description,
+                image: itemData.image,
+                link: itemData.link
+            };
+            displayGroup.add(interactionCylinder);
+            interactables.push(interactionCylinder);
+
+            const spotLight = new THREE.SpotLight(itemData.color, 2);
+            spotLight.position.set(x, 10, 0);
+            spotLight.target.position.set(x, 0, 0);
+            spotLight.angle = Math.PI / 4;
+            spotLight.penumbra = 0.5;
+            scene.add(spotLight);
+            scene.add(spotLight.target);
+
+            scene.add(displayGroup);
+            
+            // --- NEW DISPLAY BOARD (PODIUM) ---
+            const podiumGroup = new THREE.Group();
+            podiumGroup.position.set(x, 0, -2.5); // Place it in front of the hologram (facing the player spawn)
+            podiumGroup.rotation.y = Math.PI; // Spin 180 so it faces North (negative Z)
+
+            const standGeom = new THREE.CylinderGeometry(0.15, 0.25, 1.2, 16);
+            const standMat = new THREE.MeshStandardMaterial({color: 0x111111, metalness: 0.9, roughness: 0.2});
+            const stand = new THREE.Mesh(standGeom, standMat);
+            stand.position.y = 0.6;
+            podiumGroup.add(stand);
+
+            const screenGeom = new THREE.BoxGeometry(1.8, 1.2, 0.1);
+            const screenBox = new THREE.Mesh(screenGeom, standMat);
+            screenBox.position.y = 1.3;
+            screenBox.rotation.x = -Math.PI / 8; // Tilted slightly up for reading
+            podiumGroup.add(screenBox);
+
+            // --- ADDED GLOWING NEON BORDER ---
+            const edgeGeom = new THREE.EdgesGeometry(screenGeom);
+            const edgeMat = new THREE.LineBasicMaterial({ color: itemData.color });
+            const glowingEdge = new THREE.LineSegments(edgeGeom, edgeMat);
+            glowingEdge.position.copy(screenBox.position);
+            glowingEdge.rotation.copy(screenBox.rotation);
+            podiumGroup.add(glowingEdge);
+
+            // --- ADDED GLOWING POINT LIGHT ---
+            const screenGlow = new THREE.PointLight(itemData.color, 1.5, 4);
+            screenGlow.position.set(0, 1.5, 0.5);
+            podiumGroup.add(screenGlow);
+
+            const displayGeom = new THREE.PlaneGeometry(1.7, 1.1);
+            
+            // Reusing createSpriteTexture for bold, high-contrast, glowing text
+            const displayTex = createSpriteTexture(itemData.color, "INFO:\n" + itemData.text);
+            const displayMat = new THREE.MeshBasicMaterial({ 
+                map: displayTex, 
+                transparent: true,
+                depthWrite: false 
+            });
+            const displayCanvas = new THREE.Mesh(displayGeom, displayMat);
+            displayCanvas.position.set(0, 1.3, 0.051); // slightly in front of the box
+            displayCanvas.rotation.x = -Math.PI / 8;
+            podiumGroup.add(displayCanvas);
+
+            scene.add(podiumGroup);
+
+            // Make the display screen interactive
+            screenBox.userData = { 
+                title: itemData.title + " Details", 
+                description: itemData.description,
+                image: itemData.image,
+                link: itemData.link
+            };
+            interactables.push(screenBox);
+
+            // Add to our new array for floating animation
+            floatingDisplays.push({ 
+                group: displayGroup, 
+                holoGroup: holoGroup, 
+                ring1: ring1,
+                ring2: ring2,
+                core: iconSprite, 
+                seed: Math.random() * 100 
+            });
+        }
+
+        const mainProjects = [
+            { 
+                title: "Medical Application", description: "A comprehensive health tracking and telemedicine platform bridging patients with doctors.", color: "#00cec9", text: "MEDICAL\nAPP", 
+                svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-8 14h-2v-4H5v-2h4V7h2v4h4v2h-4v4z"/></svg>',
+                image: "https://placehold.co/600x450/00cec9/ffffff?text=Medical+App",
+                link: "https://example.com/medical-app"
+            },
+            { 
+                title: "Gamified Learning Platform", description: "An interactive educational platform featuring leaderboards, rewards, and engaging quests.", color: "#fdcb6e", text: "GAMIFIED\nLEARNING", 
+                svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H8v3H6v-3H3v-2h3V8h2v3h3v2zm4.5 2c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-3c-.83 0-1.5-.67-1.5-1.5S17.67 9 18.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>',
+                image: "https://placehold.co/600x450/fdcb6e/ffffff?text=Learning+Platform",
+                link: "https://example.com/learning"
+            },
+            { 
+                title: "Women Safety App", description: "A real-time SOS, location tracking, and emergency alert application for personal safety.", color: "#e84393", text: "WOMEN\nSAFETY", 
+                svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 16.5c-2.33-2.12-5-4.43-5-7.1 0-1.66 1.34-3 3-3 1.05 0 2.05.54 2.65 1.41.05.07.13.19.35.19s.3-.12.35-.19c.6-.87 1.6-1.41 2.65-1.41 1.66 0 3 1.34 3 3 0 2.67-2.67 4.98-5 7.1z"/></svg>',
+                image: "https://placehold.co/600x450/e84393/ffffff?text=Women+Safety",
+                link: "https://example.com/safety"
+            }
+        ];
+
+        mainProjects.forEach((proj, i) => addCenterDisplay(proj, (i - 1) * 8));
+
+        const infoPanel = document.getElementById('info-panel');
+        const infoTitle = document.getElementById('info-title');
+        const infoDesc = document.getElementById('info-desc');
+
+        function createPlaceholderTexture(color, text, type = 'project') {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+
+            if (type === 'main-project') {
+                // Sci-fi hologram gradient background
+                const gradient = ctx.createRadialGradient(256, 256, 10, 256, 256, 400);
+                gradient.addColorStop(0, '#2b2b2b');
+                gradient.addColorStop(1, color);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 512, 512);
+
+                // Grid lines
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.lineWidth = 2;
+                for (let i = 0; i <= 512; i += 64) {
+                    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+                }
+
+                // Tech borders
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 6;
+                ctx.strokeRect(15, 15, 482, 482);
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(25, 25, 462, 462);
+
+                // Corner accents
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(10, 10, 40, 10); ctx.fillRect(10, 10, 10, 40);
+                ctx.fillRect(462, 10, 40, 10); ctx.fillRect(492, 10, 10, 40);
+                ctx.fillRect(10, 492, 40, 10); ctx.fillRect(10, 462, 10, 40);
+                ctx.fillRect(462, 492, 40, 10); ctx.fillRect(492, 462, 10, 40);
+
+            } else {
+                ctx.fillStyle = color;
+                ctx.fillRect(0, 0, 512, 512);
+
+                if (type === 'certificate') {
+                    ctx.strokeStyle = '#ffd700';
+                    ctx.lineWidth = 15;
+                    ctx.strokeRect(20, 20, 472, 472);
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(40, 40, 432, 432);
+                } else if (type === 'skill') {
+                    ctx.beginPath();
+                    ctx.arc(256, 256, 200, 0, 2 * Math.PI);
+                    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+                    ctx.lineWidth = 15;
+                    ctx.stroke();
+                } else {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                    ctx.lineWidth = 10;
+                    ctx.strokeRect(20, 20, 472, 472);
+                }
+            }
+
+            // Drop shadow for text to make it pop more
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+            ctx.shadowBlur = 10;
+            ctx.shadowOffsetX = 3;
+            ctx.shadowOffsetY = 3;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = type === 'skill' ? 'bold 60px Arial' : (type === 'main-project' ? 'bold 50px Arial' : 'bold 40px Arial');
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            const lines = text.split('\n');
+            const lineHeight = type === 'skill' ? 70 : (type === 'main-project' ? 65 : 50);
+            const startY = 256 - ((lines.length - 1) * lineHeight) / 2;
+
+            lines.forEach((line, index) => {
+                ctx.fillText(line, 256, startY + (index * lineHeight));
+            });
+
+            ctx.shadowColor = 'transparent'; // Reset shadow
+
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        function addFramedItem(itemData, type) {
+            const { position, rotation, width, height, title, description, color, text, image, link } = itemData;
+
+            const frameGroup = new THREE.Group();
+            frameGroup.position.copy(position);
+            frameGroup.rotation.copy(rotation);
+
+            const frameDepth = 0.1;
+            const frameWidth = 0.1;
+            const frameGeometry = new THREE.BoxGeometry(width + frameWidth*2, height + frameWidth*2, frameDepth);
+            const frameColor = type === 'certificate' ? 0xb8860b : 0xffffff;
+            const frameMaterial = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.5, metalness: type === 'certificate' ? 0.8 : 0.1 });
+            const frame = new THREE.Mesh(frameGeometry, frameMaterial);
+            frame.castShadow = true;
+            frame.receiveShadow = true;
+            frameGroup.add(frame);
+
+            const canvasGeometry = new THREE.PlaneGeometry(width, height);
+            const texture = createPlaceholderTexture(color, text, type);
+            const canvasMaterial = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.5 });
+            const canvasMesh = new THREE.Mesh(canvasGeometry, canvasMaterial);
+            canvasMesh.position.z = frameDepth / 2 + 0.01;
+            frameGroup.add(canvasMesh);
+
+            const spotLight = new THREE.SpotLight(0xffffff, 0.8);
+            spotLight.position.set(0, height/2 + 2, 2);
+            spotLight.target = canvasMesh;
+            spotLight.angle = Math.PI / 5;
+            spotLight.penumbra = 0.5;
+            spotLight.distance = 15;
+            // Removed spotLight.castShadow = true; to fix MAX_TEXTURE_IMAGE_UNITS(16) error
+            
+            frameGroup.add(spotLight);
+            frameGroup.add(spotLight.target);
+
+            scene.add(frameGroup);
+
+            // Added image and link to userData so click event can display them
+            canvasMesh.userData = { title, description, image, link };
+            interactables.push(canvasMesh);
+        }
+
+        function addAchievement(itemData) {
+            const { position, title, description, color } = itemData;
+
+            const achievementGroup = new THREE.Group();
+            achievementGroup.position.copy(position);
+
+            const pedGeometry = new THREE.CylinderGeometry(0.5, 0.6, 1.2, 32);
+            const pedMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
+            const pedestal = new THREE.Mesh(pedGeometry, pedMaterial);
+            pedestal.position.y = 0.6;
+            pedestal.castShadow = true;
+            pedestal.receiveShadow = true;
+            achievementGroup.add(pedestal);
+
+            // Create a realistic compound 3D Trophy
+            const trophyGroup = new THREE.Group();
+            trophyGroup.position.y = 1.2; // Start on top of the pedestal
+
+            // Highly reflective material for the metal parts
+            const trophyMat = new THREE.MeshStandardMaterial({ 
+                color: color, 
+                metalness: 1.0, 
+                roughness: 0.1, // Lower roughness = much shinier metal
+                side: THREE.DoubleSide // Important for the open bowl
+            });
+
+            // Dark tiered wooden/marble base for realism
+            const baseMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+            
+            const baseBottomGeom = new THREE.BoxGeometry(0.7, 0.1, 0.7);
+            const baseBottom = new THREE.Mesh(baseBottomGeom, baseMat);
+            baseBottom.position.y = 0.05;
+            baseBottom.castShadow = true;
+            trophyGroup.add(baseBottom);
+
+            const baseTopGeom = new THREE.BoxGeometry(0.5, 0.1, 0.5);
+            const baseTop = new THREE.Mesh(baseTopGeom, baseMat);
+            baseTop.position.y = 0.15;
+            baseTop.castShadow = true;
+            trophyGroup.add(baseTop);
+
+            // Trophy Stem (Flared bottom)
+            const stemBaseGeom = new THREE.CylinderGeometry(0.12, 0.22, 0.1, 32);
+            const stemBase = new THREE.Mesh(stemBaseGeom, trophyMat);
+            stemBase.position.y = 0.25;
+            stemBase.castShadow = true;
+            trophyGroup.add(stemBase);
+
+            // Trophy Stem (Main pillar)
+            const stemGeom = new THREE.CylinderGeometry(0.06, 0.1, 0.3, 32);
+            const stemMesh = new THREE.Mesh(stemGeom, trophyMat);
+            stemMesh.position.y = 0.45;
+            stemMesh.castShadow = true;
+            trophyGroup.add(stemMesh);
+
+            // Trophy Stem (Decorative knot)
+            const stemKnotGeom = new THREE.SphereGeometry(0.12, 32, 16);
+            const stemKnot = new THREE.Mesh(stemKnotGeom, trophyMat);
+            stemKnot.position.y = 0.6;
+            stemKnot.scale.y = 0.5; // Flatten into a disk
+            stemKnot.castShadow = true;
+            trophyGroup.add(stemKnot);
+
+            // Trophy Cup (Realistic open bowl using half-sphere)
+            // SphereGeometry: radius, wSeg, hSeg, phiStart, phiLen, thetaStart, thetaLen
+            const bowlGeom = new THREE.SphereGeometry(0.35, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+            const bowl = new THREE.Mesh(bowlGeom, trophyMat);
+            bowl.position.y = 0.95; 
+            bowl.rotation.x = Math.PI; // Flip to make an upward-facing bowl
+            bowl.castShadow = true;
+            trophyGroup.add(bowl);
+            
+            // Trophy Cup Rim
+            const rimGeom = new THREE.TorusGeometry(0.35, 0.02, 16, 32);
+            const rim = new THREE.Mesh(rimGeom, trophyMat);
+            rim.position.y = 0.95;
+            rim.rotation.x = Math.PI / 2;
+            rim.castShadow = true;
+            trophyGroup.add(rim);
+
+            // Trophy Handles (Sweeping arched handles)
+            const handleGeom = new THREE.TorusGeometry(0.22, 0.025, 16, 32, Math.PI * 1.2);
+            
+            const handleLeft = new THREE.Mesh(handleGeom, trophyMat);
+            handleLeft.position.set(-0.32, 0.75, 0);
+            handleLeft.rotation.z = 1.2; 
+            handleLeft.castShadow = true;
+            trophyGroup.add(handleLeft);
+
+            const handleRight = new THREE.Mesh(handleGeom, trophyMat);
+            handleRight.position.set(0.32, 0.75, 0);
+            handleRight.rotation.y = Math.PI; // Flip horizontally to mirror the arc
+            handleRight.rotation.z = 1.2; 
+            handleRight.castShadow = true;
+            trophyGroup.add(handleRight);
+
+            achievementGroup.add(trophyGroup);
+            
+            // Add back to dynamicObjects for sideways rotation
+            dynamicObjects.push(trophyGroup);
+
+            const boxGeometry = new THREE.BoxGeometry(1.5, 3, 1.5);
+            const boxMaterial = new THREE.MeshBasicMaterial({ visible: false });
+            const interactionBox = new THREE.Mesh(boxGeometry, boxMaterial);
+            interactionBox.position.y = 1.5;
+            achievementGroup.add(interactionBox);
+
+            const spotLight = new THREE.SpotLight(0xffffff, 1);
+            spotLight.position.set(0, 4, 0);
+            spotLight.target = interactionBox; // point at the invisible hit box
+            spotLight.angle = Math.PI / 6;
+            spotLight.penumbra = 0.3;
+            achievementGroup.add(spotLight);
+            achievementGroup.add(spotLight.target);
+
+            scene.add(achievementGroup);
+
+            interactionBox.userData = { title, description };
+            interactables.push(interactionBox);
+        }
+
+        const projectsData = [
+            // Column 1
+            { position: new THREE.Vector3(-17, 4.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "E-Commerce Replatform", description: "Led the migration of a legacy monolithic store to a modern microservices architecture using React and Node.js.", color: "#2c3e50", text: "Project 1\nE-Commerce", image: "https://placehold.co/600x450/2c3e50/ffffff?text=E-Commerce+App", link: "https://example.com/ecommerce" },
+            { position: new THREE.Vector3(-17, 1.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "AI Analytics Dashboard", description: "Built an interactive dashboard visualizing real-time AI predictions using D3.js, WebGL, and Python.", color: "#8e44ad", text: "Project 2\nAI Dashboard", image: "https://placehold.co/600x450/8e44ad/ffffff?text=AI+Dashboard", link: "https://example.com/ai-dash" },
+            // Column 2
+            { position: new THREE.Vector3(-12, 4.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Mobile FinTech App", description: "Designed and developed a cross-platform mobile wallet app in React Native.", color: "#2980b9", text: "Project 3\nFinTech App", image: "https://placehold.co/600x450/2980b9/ffffff?text=FinTech+App", link: "https://example.com/fintech" },
+            { position: new THREE.Vector3(-12, 1.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Real-time Chat Platform", description: "Developed a low-latency WebSockets communication tool used by over 10k concurrent users.", color: "#c0392b", text: "Project 4\nWebSockets", image: "https://placehold.co/600x450/c0392b/ffffff?text=Chat+App", link: "https://example.com/chat" },
+            // Column 3
+            { position: new THREE.Vector3(-7, 4.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Crypto Tracker", description: "A live cryptocurrency tracking application leveraging public APIs and chart visualizations.", color: "#f39c12", text: "Project 5\nCrypto", image: "https://placehold.co/600x450/f39c12/ffffff?text=Crypto+Tracker", link: "https://example.com/crypto" },
+            { position: new THREE.Vector3(-7, 1.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Smart Home IoT Hub", description: "Centralized interface for controlling smart home devices via MQTT protocols.", color: "#16a085", text: "Project 6\nIoT Hub", image: "https://placehold.co/600x450/16a085/ffffff?text=IoT+Hub", link: "https://example.com/iot" },
+            // Column 4
+            { position: new THREE.Vector3(-2, 4.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Social Media Clone", description: "A full-stack social networking application featuring posts, likes, and real-time notifications.", color: "#d35400", text: "Project 7\nSocial App", image: "https://placehold.co/600x450/d35400/ffffff?text=Social+App", link: "https://example.com/social" },
+            { position: new THREE.Vector3(-2, 1.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "ML Chatbot", description: "Integrated NLP models to create an intelligent customer support chatbot.", color: "#27ae60", text: "Project 8\nML Bot", image: "https://placehold.co/600x450/27ae60/ffffff?text=ML+Bot", link: "https://example.com/chatbot" },
+            // Column 5
+            { position: new THREE.Vector3(3, 4.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Booking System", description: "A complex calendar and booking management system for local clinics.", color: "#34495e", text: "Project 9\nBooking", image: "https://placehold.co/600x450/34495e/ffffff?text=Booking+System", link: "https://example.com/booking" },
+            { position: new THREE.Vector3(3, 1.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Fitness Tracker", description: "Mobile-first PWA for logging workouts and tracking caloric intake.", color: "#e74c3c", text: "Project 10\nFitness App", image: "https://placehold.co/600x450/e74c3c/ffffff?text=Fitness+Tracker", link: "https://example.com/fitness" },
+            // Column 6
+            { position: new THREE.Vector3(8, 4.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "Weather Forecast CLI", description: "A lightweight, fast command-line interface tool for fetching weather data.", color: "#8e44ad", text: "Project 11\nCLI Tool", image: "https://placehold.co/600x450/8e44ad/ffffff?text=Weather+CLI", link: "https://example.com/weather" },
+            { position: new THREE.Vector3(8, 1.4, -halfDepth + 0.1), rotation: new THREE.Euler(0, 0, 0), width: 2.5, height: 1.8, title: "AR Navigation", description: "An augmented reality pathfinding app built with React Native and ARKit.", color: "#e67e22", text: "Project 12\nAR Nav", image: "https://placehold.co/600x450/e67e22/ffffff?text=AR+Nav", link: "https://example.com/arnav" }
+        ];
+
+        const certificatesData = [
+            // Column 1
+            { position: new THREE.Vector3(halfWidth - 0.1, 4.4, -15), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "AWS Certified Solutions Architect", description: "Professional tier certification validating advanced technical skills.", color: "#d35400", text: "Cert 1\nAWS Architect", image: "https://placehold.co/600x450/d35400/ffffff?text=AWS+Architect" },
+            { position: new THREE.Vector3(halfWidth - 0.1, 1.4, -15), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "Google Cloud Professional", description: "Proficiency in building scalable applications on GCP.", color: "#c0392b", text: "Cert 2\nGCP Dev", image: "https://placehold.co/600x450/c0392b/ffffff?text=GCP+Dev" },
+            // Column 2
+            { position: new THREE.Vector3(halfWidth - 0.1, 4.4, -9), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "React Advanced Certification", description: "12-week bootcamp focusing on advanced state management.", color: "#16a085", text: "Cert 3\nReact Master", image: "https://placehold.co/600x450/16a085/ffffff?text=React+Master" },
+            { position: new THREE.Vector3(halfWidth - 0.1, 1.4, -9), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "Certified Kubernetes Admin", description: "Deploying, maintaining, and managing Kubernetes clusters.", color: "#2980b9", text: "Cert 4\nCKA Status", image: "https://placehold.co/600x450/2980b9/ffffff?text=CKA+Status" },
+            // Column 3
+            { position: new THREE.Vector3(halfWidth - 0.1, 4.4, -3), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "Azure Fundamentals", description: "Foundational knowledge of cloud services and Microsoft Azure.", color: "#0078d4", text: "Cert 5\nAzure", image: "https://placehold.co/600x450/0078d4/ffffff?text=Azure" },
+            { position: new THREE.Vector3(halfWidth - 0.1, 1.4, -3), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "PMP Certification", description: "Project Management Professional certification.", color: "#e67e22", text: "Cert 6\nPMP", image: "https://placehold.co/600x450/e67e22/ffffff?text=PMP" },
+            // Column 4
+            { position: new THREE.Vector3(halfWidth - 0.1, 4.4, 3), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "Certified Scrum Master", description: "Mastery of agile methodologies and team facilitation.", color: "#27ae60", text: "Cert 7\nScrum Master", image: "https://placehold.co/600x450/27ae60/ffffff?text=Scrum+Master" },
+            { position: new THREE.Vector3(halfWidth - 0.1, 1.4, 3), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "CISSP", description: "Certified Information Systems Security Professional.", color: "#8e44ad", text: "Cert 8\nCISSP", image: "https://placehold.co/600x450/8e44ad/ffffff?text=CISSP" },
+            // Column 5
+            { position: new THREE.Vector3(halfWidth - 0.1, 4.4, 9), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "CompTIA Linux+", description: "Advanced system administration and command line skills.", color: "#f1c40f", text: "Cert 9\nLinux+", image: "https://placehold.co/600x450/f1c40f/ffffff?text=Linux+" },
+            { position: new THREE.Vector3(halfWidth - 0.1, 1.4, 9), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "MongoDB Certified", description: "Database optimization, indexing, and aggregation framework.", color: "#4caf50", text: "Cert 10\nMongoDB", image: "https://placehold.co/600x450/4caf50/ffffff?text=MongoDB" },
+            // Column 6
+            { position: new THREE.Vector3(halfWidth - 0.1, 4.4, 15), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "Data Science Specialization", description: "Machine learning, statistical analysis, and Python data tools.", color: "#34495e", text: "Cert 11\nData Science", image: "https://placehold.co/600x450/34495e/ffffff?text=Data+Science" },
+            { position: new THREE.Vector3(halfWidth - 0.1, 1.4, 15), rotation: new THREE.Euler(0, -Math.PI/2, 0), width: 1.8, height: 2.2, title: "Oracle DB Master", description: "Advanced database administration, architecture, and tuning.", color: "#16a085", text: "Cert 12\nOracle DB", image: "https://placehold.co/600x450/16a085/ffffff?text=Oracle+DB" }
+        ];
+
+        const skillsData = [
+            // Column 1
+            { position: new THREE.Vector3(-15, 4.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Frontend Development", description: "Expertise in HTML, CSS, JavaScript, React, Vue, and Three.js.", color: "#e67e22", text: "Skill 1\nFrontend" },
+            { position: new THREE.Vector3(-15, 1.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Backend Systems", description: "Building robust APIs and microservices using Node.js, Python, and Go.", color: "#27ae60", text: "Skill 2\nBackend" },
+            // Column 2
+            { position: new THREE.Vector3(-9, 4.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Database Architecture", description: "Designing and optimizing SQL (PostgreSQL, MySQL) and NoSQL.", color: "#34495e", text: "Skill 3\nDatabases" },
+            { position: new THREE.Vector3(-9, 1.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Cloud & DevOps", description: "Automating CI/CD pipelines and managing infrastructure.", color: "#8e44ad", text: "Skill 4\nCloud / CI" },
+            // Column 3
+            { position: new THREE.Vector3(-3, 4.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "UI/UX Design", description: "Wireframing, prototyping, and creating user-centric interfaces.", color: "#e74c3c", text: "Skill 5\nUI/UX" },
+            { position: new THREE.Vector3(-3, 1.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Mobile Development", description: "Building cross-platform apps with React Native and Flutter.", color: "#2980b9", text: "Skill 6\nMobile Dev" },
+            // Column 4
+            { position: new THREE.Vector3(3, 4.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Cyber Security", description: "Vulnerability assessment, cryptography, and secure coding.", color: "#2c3e50", text: "Skill 7\nSecurity" },
+            { position: new THREE.Vector3(3, 1.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "System Design", description: "Architecting highly scalable, fault-tolerant distributed systems.", color: "#f39c12", text: "Skill 8\nSys Design" },
+            // Column 5
+            { position: new THREE.Vector3(9, 4.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Blockchain", description: "Smart contract development and decentralized applications (Web3).", color: "#16a085", text: "Skill 9\nBlockchain" },
+            { position: new THREE.Vector3(9, 1.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Game Development", description: "Creating immersive 3D and 2D experiences using Unity and WebGL.", color: "#c0392b", text: "Skill 10\nGame Dev" },
+            // Column 6
+            { position: new THREE.Vector3(15, 4.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Agile Leadership", description: "Leading sprints, managing backlogs, and boosting team velocity.", color: "#f1c40f", text: "Skill 11\nAgile" },
+            { position: new THREE.Vector3(15, 1.4, halfDepth - 0.1), rotation: new THREE.Euler(0, Math.PI, 0), width: 1.8, height: 1.8, title: "Performance Optimization", description: "Profiling, caching, and improving critical Web Vitals scores.", color: "#d35400", text: "Skill 12\nWeb Perf" }
+        ];
+
+        const achievementsData = [
+            { position: new THREE.Vector3(-halfWidth + 3, 0, -10), title: "Global Hackathon: 1st Place", description: "Won 1st place in the Web3 Global Hackathon for building a decentralized identity app.", color: 0xffd700, shape: 'star' },
+            { position: new THREE.Vector3(-halfWidth + 3, 0, -5), title: "AI Innovation Hack", description: "Built an accessibility tool for visually impaired users. Top 5 finalist.", color: 0xc0c0c0, shape: 'gem' },
+            { position: new THREE.Vector3(-halfWidth + 3, 0, 0), title: "Climate Tech Hackathon", description: "Developed a carbon tracking dashboard. Awarded Best UI/UX.", color: 0xcd7f32, shape: 'cube' },
+            { position: new THREE.Vector3(-halfWidth + 3, 0, 5), title: "DefCon Qualifier CTF", description: "Placed in the top 10% in the annual Capture The Flag cybersecurity challenge.", color: 0x9b59b6, shape: 'star' },
+            { position: new THREE.Vector3(-halfWidth + 3, 0, 10), title: "Open Source Festival", description: "Contributed critical features to major open source tools. Voted best overall contributor.", color: 0x1e90ff, shape: 'cube' }
+        ];
+
+        projectsData.forEach(data => addFramedItem(data, 'project'));
+        certificatesData.forEach(data => addFramedItem(data, 'certificate'));
+        skillsData.forEach(data => addFramedItem(data, 'skill'));
+        achievementsData.forEach(data => addAchievement(data));
+
+        // --- 5 Hackathon Image Placeholders ---
+        achievementsData.forEach((hackathon, index) => {
+            const imgGroup = new THREE.Group();
+            imgGroup.position.set(-halfWidth + 0.1, 4.2, hackathon.position.z); // Placed on the wall behind each trophy
+            imgGroup.rotation.y = Math.PI / 2;
+
+            const imgGeom = new THREE.PlaneGeometry(3.5, 2.5); // Adjusted to individual frame size
+            
+            // ---------------------------------------------------------
+            // TO ADD YOUR OWN IMAGES:
+            // 1. Create an array of your image URLs (must be 5 URLs)
+            // const imageUrls = [
+            //    'https://example.com/hack1.jpg',
+            //    'https://example.com/hack2.jpg',
+            //    'https://example.com/hack3.jpg',
+            //    'https://example.com/hack4.jpg',
+            //    'https://example.com/hack5.jpg'
+            // ];
+            // 2. Comment out the createPlaceholderTexture line below.
+            // 3. Uncomment the TextureLoader line below.
+            // const myImgTex = new THREE.TextureLoader().load(imageUrls[index]);
+            // ---------------------------------------------------------
+            const myImgTex = createPlaceholderTexture("#1e272e", `HACKATHON ${index + 1}\nPHOTO`, "project");
+            
+            const myImgMat = new THREE.MeshStandardMaterial({ map: myImgTex, roughness: 0.6 });
+            const myImgMesh = new THREE.Mesh(imgGeom, myImgMat);
+            myImgMesh.position.z = 0.06;
+            imgGroup.add(myImgMesh);
+
+            // Frame for the image
+            const myImgFrame = new THREE.Mesh(
+                new THREE.BoxGeometry(3.7, 2.7, 0.1), 
+                new THREE.MeshStandardMaterial({color: 0x111111, roughness: 0.5})
+            );
+            imgGroup.add(myImgFrame);
+            
+            // Add subtle spotlight for each image
+            const imgSpotLight = new THREE.SpotLight(0xffffff, 0.6);
+            imgSpotLight.position.set(3, 2, 0);
+            imgSpotLight.target = myImgMesh;
+            imgSpotLight.angle = Math.PI / 4;
+            imgSpotLight.penumbra = 0.5;
+            imgGroup.add(imgSpotLight);
+            imgGroup.add(imgSpotLight.target);
+
+            myImgMesh.userData = { 
+                title: hackathon.title + " Photo", 
+                description: "This is where I'll put an awesome photo of my team winning this hackathon!\n\n(Edit the code to swap the texture with your image URL)" 
+            };
+            interactables.push(myImgMesh);
+            scene.add(imgGroup);
+        });
+
+        const trashGroup = new THREE.Group();
+        trashGroup.position.set(-16, 0, 16); 
+
+        const binGeom = new THREE.CylinderGeometry(0.8, 0.6, 2, 16, 1, true);
+        const binMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.3, side: THREE.DoubleSide });
+        const bin = new THREE.Mesh(binGeom, binMat);
+        bin.position.y = 1;
+        bin.castShadow = true;
+        trashGroup.add(bin);
+
+        const binBottomGeom = new THREE.CircleGeometry(0.6, 16);
+        const binBottom = new THREE.Mesh(binBottomGeom, binMat);
+        binBottom.rotation.x = -Math.PI / 2;
+        trashGroup.add(binBottom);
+
+        const negativityColors = [0x8b0000, 0x4b0082, 0x2f4f4f];
+        for(let i = 0; i < 15; i++) {
+            const paperGeom = new THREE.IcosahedronGeometry(0.15 + Math.random() * 0.1, 0);
+            const paperMat = new THREE.MeshStandardMaterial({ color: negativityColors[i % 3], roughness: 0.9 });
+            const paper = new THREE.Mesh(paperGeom, paperMat);
+            paper.position.set((Math.random() - 0.5) * 0.8, 0.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.8);
+            paper.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+            trashGroup.add(paper);
+        }
+
+        const trashHitGeom = new THREE.BoxGeometry(2, 2.5, 2);
+        const trashHitMat = new THREE.MeshBasicMaterial({ visible: false });
+        const trashHitBox = new THREE.Mesh(trashHitGeom, trashHitMat);
+        trashHitBox.position.y = 1.25;
+        trashHitBox.userData = { 
+            title: "🗑️ The Negativity Bin", 
+            description: "Here lies Impostor Syndrome, countless syntax errors, procrastination, and rejections.\n\nThey stay securely in this bin so I can focus on building great things!" 
+        };
+        trashGroup.add(trashHitBox);
+        interactables.push(trashHitBox);
+
+        scene.add(trashGroup);
+
+        const welcomeGroup = new THREE.Group();
+        welcomeGroup.position.set(14, 0, -12); // Positioned directly in front of spawn point
+        welcomeGroup.rotation.y = Math.PI; // Flipped to face the player
+
+        const plinthGeometry = new THREE.CylinderGeometry(1, 1.2, 0.5, 32);
+        const plinthMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+        const plinth = new THREE.Mesh(plinthGeometry, plinthMaterial);
+        plinth.position.y = 0.25;
+        welcomeGroup.add(plinth);
+
+        const welcomeGeom = new THREE.PlaneGeometry(2, 1);
+        const welcomeTex = createPlaceholderTexture("#222", "Welcome to\nMy Portfolio", "project");
+        const welcomeMat = new THREE.MeshStandardMaterial({ map: welcomeTex });
+        const welcomeMesh = new THREE.Mesh(welcomeGeom, welcomeMat);
+        welcomeMesh.position.y = 1.2;
+        welcomeMesh.rotation.x = -Math.PI / 6;
+        welcomeGroup.add(welcomeMesh);
+
+        const welcomeBoxGeom = new THREE.BoxGeometry(2, 1.5, 1);
+        const welcomeBoxMat = new THREE.MeshBasicMaterial({ visible: false });
+        const welcomeBox = new THREE.Mesh(welcomeBoxGeom, welcomeBoxMat);
+        welcomeBox.position.y = 1;
+        welcomeBox.userData = { title: "Welcome!", description: "Explore my interactive portfolio room. \nCenter: Main Projects \nNorth: Other Projects \nEast: Certificates \nSouth: Skills \nWest: Hackathons" };
+        welcomeGroup.add(welcomeBox);
+        interactables.push(welcomeBox);
+
+        scene.add(welcomeGroup);
+
+        const doorGroup = new THREE.Group();
+        // Positioned on the North wall, to the right of the projects
+        doorGroup.position.set(14, 0, -halfDepth + 0.1); 
+
+        const doorGeom = new THREE.BoxGeometry(4, 7, 0.2);
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x5C4033, roughness: 0.9 });
+        const door = new THREE.Mesh(doorGeom, doorMat);
+        door.position.y = 3.5;
+        door.castShadow = true;
+        door.receiveShadow = true;
+        
+        // Add interaction data for the door
+        door.userData = { 
+            title: "Exit Door", 
+            description: "Click to open the door and enter Hello.html",
+            isDoor: true,
+            url: "Hello.html"
+        };
+        interactables.push(door);
+        doorGroup.add(door);
+
+        // Add a shiny gold doorknob
+        const knobGeom = new THREE.SphereGeometry(0.15, 16, 16);
+        const knobMat = new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1.0, roughness: 0.2 });
+        const knob = new THREE.Mesh(knobGeom, knobMat);
+        knob.position.set(-1.4, 3.5, 0.15); 
+        doorGroup.add(knob);
+
+        scene.add(doorGroup);
+
+        let INTERSECTED = null;
+        const hoverColor = new THREE.Color(0xaaaaaa);
+
+        function showInfo(title) {
+            infoTitle.innerText = title;
+            infoDesc.innerText = "Click to view details";
+            infoPanel.classList.add('visible');
+        }
+
+        function hideInfo() {
+            infoPanel.classList.remove('visible');
+        }
+
+        const itemModal = document.getElementById('item-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const modalClose = document.getElementById('modal-close');
+        // Added modalImg reference
+        const modalImg = document.getElementById('modal-img');
+        const modalLink = document.getElementById('modal-link');
+
+        modalClose.addEventListener('click', () => {
+            itemModal.classList.remove('active');
+            
+            // Hide the image when closed
+            modalImg.style.display = 'none';
+            modalImg.src = '';
+            
+            setTimeout(() => { 
+                if (controls) controls.lock(); 
+            }, 100);
+        });
+
+        document.addEventListener('mousedown', (event) => {
+            if (event.button === 0 && controls && controls.isLocked && INTERSECTED) {
+                
+                // Check if the clicked object is the door
+                if (INTERSECTED.userData.isDoor) {
+                    document.exitPointerLock(); // Free the mouse
+                    window.location.href = INTERSECTED.userData.url; // Redirect to next room
+                } else {
+                    // Regular portfolio item modal
+                    modalTitle.innerText = INTERSECTED.userData.title;
+                    modalDesc.innerText = INTERSECTED.userData.description;
+                    
+                    // Display image if it exists in the userData (e.g. for certificates)
+                    if (INTERSECTED.userData.image) {
+                        modalImg.src = INTERSECTED.userData.image;
+                        modalImg.style.display = 'block';
+                    } else {
+                        modalImg.src = '';
+                        modalImg.style.display = 'none';
+                    }
+
+                    // Display prototype link if it exists (e.g. for projects)
+                    if (INTERSECTED.userData.link) {
+                        modalLink.href = INTERSECTED.userData.link;
+                        modalLink.style.display = 'inline-block';
+                    } else {
+                        modalLink.href = '#';
+                        modalLink.style.display = 'none';
+                    }
+                    
+                    document.exitPointerLock(); 
+                    itemModal.classList.add('active');
+                }
+            }
+        });
+
+        function checkIntersections() {
+            if (!controls || !controls.isLocked) return;
+
+            raycaster.setFromCamera(centerScreen, camera);
+
+            const intersects = raycaster.intersectObjects(interactables);
+
+            if (intersects.length > 0) {
+                if(intersects[0].distance < 6) {
+                    if (INTERSECTED != intersects[0].object) {
+                        
+                        if (INTERSECTED && INTERSECTED.material && INTERSECTED.material.emissive) {
+                             INTERSECTED.material.emissive.setHex(0x000000);
+                        }
+
+                        INTERSECTED = intersects[0].object;
+                        
+                        if (INTERSECTED.material && INTERSECTED.material.emissive) {
+                            INTERSECTED.material.emissive.setHex(0x333333); 
+                        }
+
+                        showInfo(INTERSECTED.userData.title);
+                    }
+                } else {
+                    if (INTERSECTED) {
+                        if (INTERSECTED.material && INTERSECTED.material.emissive) INTERSECTED.material.emissive.setHex(0x000000);
+                        INTERSECTED = null;
+                        hideInfo();
+                    }
+                }
+            } else {
+                if (INTERSECTED) {
+                    if (INTERSECTED.material && INTERSECTED.material.emissive) INTERSECTED.material.emissive.setHex(0x000000);
+                    INTERSECTED = null;
+                    hideInfo();
+                }
+            }
+        }
+
+        window.addEventListener('resize', onWindowResize, false);
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+
+            // Pulse the floor grid opacity
+            gridLineMat.opacity = 0.4 + Math.sin(time * 0.002) * 0.2;
+
+            // Float the dust particles
+            const positionsArr = particlesGeom.attributes.position.array;
+            for (let i = 0; i < particleCount * 3; i += 3) {
+                positionsArr[i+1] += 0.003; 
+                positionsArr[i] += Math.sin(time * 0.001 + i) * 0.002; 
+                if (positionsArr[i+1] > wallHeight) {
+                    positionsArr[i+1] = 0; 
+                }
+            }
+            particlesGeom.attributes.position.needsUpdate = true;
+
+            dynamicObjects.forEach(obj => {
+                obj.rotation.y += 0.01;
+            });
+
+            // Animate the holographic displays
+            floatingDisplays.forEach(display => {
+                display.holoGroup.rotation.y -= 0.005; 
+                display.ring1.rotation.x += 0.01;
+                display.ring1.rotation.y += 0.02;
+            display.ring2.rotation.y -= 0.01;
+            display.ring2.rotation.z += 0.02;
+            
+            // Pulse the SVG icon scale with the new larger size
+            const scalePulse = 3.5 + Math.sin(time * 0.003 + display.seed) * 0.3;
+            display.core.scale.set(scalePulse, scalePulse, 1); 
+            
+            // Gentle floating up and down bob
+            display.group.position.y = 3.5 + Math.sin(time * 0.002 + display.seed) * 0.3;
+        });
+
+        if (controls && controls.isLocked === true) {
+                const delta = (time - prevTime) / 1000;
+
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= gravity * delta;
+
+                direction.z = Number(moveForward) - Number(moveBackward);
+                direction.x = Number(moveRight) - Number(moveLeft);
+                direction.normalize();
+
+                const currentSpeed = isRunning ? speed * 2.2 : speed;
+
+                if (moveForward || moveBackward) velocity.z -= direction.z * currentSpeed * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * currentSpeed * delta;
+
+                controls.moveRight(-velocity.x * delta);
+                controls.moveForward(-velocity.z * delta);
+                
+                controls.getObject().position.y += (velocity.y * delta);
+
+                if (controls.getObject().position.y < 3.5) {
+                    velocity.y = 0;
+                    controls.getObject().position.y = 3.5;
+                    canJump = true;
+                }
+
+                const pos = controls.getObject().position;
+                const boundaryWidth = halfWidth - 1;
+                const boundaryDepth = halfDepth - 1; 
+                
+                if (pos.x > boundaryWidth) pos.x = boundaryWidth;
+                if (pos.x < -boundaryWidth) pos.x = -boundaryWidth;
+                if (pos.z > boundaryDepth) pos.z = boundaryDepth;
+                if (pos.z < -boundaryDepth) pos.z = -boundaryDepth;
+
+                checkIntersections();
+            }
+
+            prevTime = time;
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function() {
+            const loading = document.getElementById('loading');
+            loading.style.opacity = '0';
+            setTimeout(() => {
+                loading.style.display = 'none';
+                if(typeof THREE.PointerLockControls !== 'undefined') {
+                    initControls();
+                } else {
+                    console.error("PointerLockControls script failed to load.");
+                    document.getElementById('loading').innerText = "Error loading controls.";
+                    document.getElementById('loading').style.display = 'block';
+                    document.getElementById('loading').style.opacity = '1';
+                }
+                
+                animate();
+            }, 500);
+        };
+
+    </script>
+</body>
+</html>
